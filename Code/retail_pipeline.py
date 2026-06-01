@@ -1,11 +1,9 @@
 import pandas as pd
+import sqlite3
 
 file_path = "Data/USECASE - Data Engineering.xlsx"
 
-xls = pd.ExcelFile(file_path)
-
-# print("Available Sheets:")
-# print(xls.sheet_names)
+# READ SOURCE FILES
 
 product_df = pd.read_excel(
     file_path,
@@ -43,11 +41,13 @@ print(retail1_df.shape)
 print("\nRetail Data 2 Shape:")
 print(retail2_df.shape)
 
+# BRONZE LAYER
+
 bronze_df = pd.concat(
     [retail1_df, retail2_df],
     ignore_index=True
 )
-#create and save bronze layer
+
 print("\nCombined Bronze Layer Shape:")
 print(bronze_df.shape)
 
@@ -64,24 +64,16 @@ print(bronze_df.isnull().sum())
 print("\nDuplicate Records:")
 print(bronze_df.duplicated().sum())
 
-print("\nColumns:")
-print(bronze_df.columns.tolist())
-
+# Remove Unnamed Columns if any
 bronze_df = bronze_df.loc[
     :,
     ~bronze_df.columns.str.contains("^Unnamed")
 ]
 
-print(bronze_df.columns)
+# ----------------------------
+# SILVER LAYER
+# ----------------------------
 
-silver_df = bronze_df.copy()
-
-print("\nMissing Values:")
-print(
-    silver_df.isnull().sum()
-    .sort_values(ascending=False)
-)
-#silver layer creation
 silver_df = bronze_df.copy()
 
 before_count = len(silver_df)
@@ -94,6 +86,10 @@ duplicates_removed = before_count - after_count
 
 print(f"\nDuplicates Removed: {duplicates_removed}")
 
+# Save missing price count before fixing
+missing_prices_before = silver_df['price'].isnull().sum()
+
+# Recover Missing Prices
 silver_df = silver_df.merge(
     product_df[['product_id', 'price']],
     on='product_id',
@@ -111,10 +107,9 @@ silver_df.drop(
 )
 
 print("\nMissing Prices After Recovery:")
-print(
-    silver_df['price'].isnull().sum()
-)
+print(silver_df['price'].isnull().sum())
 
+# Standardize Product Names
 silver_df['product_name'] = (
     silver_df['product_name']
     .astype(str)
@@ -122,6 +117,7 @@ silver_df['product_name'] = (
     .str.title()
 )
 
+# Standardize Categories
 silver_df['category'] = (
     silver_df['category']
     .astype(str)
@@ -129,13 +125,44 @@ silver_df['category'] = (
     .str.title()
 )
 
+category_mapping = {
+    'Elec': 'Electronics',
+    'Furn': 'Furniture',
+    'Cloth': 'Clothing',
+    'Home': 'Home Appliances'
+}
+
+silver_df['category'] = (
+    silver_df['category']
+    .replace(category_mapping)
+)
+
+print("\nUnique Categories After Mapping:")
+print(silver_df['category'].unique())
+
+# Standardize City
+silver_df['city'] = (
+    silver_df['city']
+    .astype(str)
+    .str.strip()
+    .str.title()
+)
+
+# Convert Date
 silver_df['transaction_date'] = pd.to_datetime(
     silver_df['transaction_date']
 )
 
+# DATA PRIVACY
+
 def mask_email(email):
 
-    name, domain = str(email).split("@")
+    email = str(email)
+
+    if "@" not in email:
+        return email
+
+    name, domain = email.split("@")
 
     return name[:2] + "****@" + domain
 
@@ -145,14 +172,8 @@ silver_df['email'] = (
 )
 
 def mask_phone(phone):
-
     phone = str(phone)
-
-    return (
-        phone[:2]
-        + "******"
-        + phone[-2:]
-    )
+    return phone[:2] + "******" + phone[-2:]
 
 silver_df['phone'] = (
     silver_df['phone']
@@ -160,9 +181,7 @@ silver_df['phone'] = (
 )
 
 print("\nSilver Layer Missing Values:")
-print(
-    silver_df.isnull().sum()
-)
+print(silver_df.isnull().sum())
 
 silver_df.to_csv(
     "Output/silver_data.csv",
@@ -171,15 +190,14 @@ silver_df.to_csv(
 
 print("\nSilver Layer Saved Successfully!")
 
-#gold layer creation
+# GOLD LAYER
+
 gold_df = silver_df.copy()
 
 gold_df['revenue'] = (
     gold_df['price']
-    *
-    gold_df['quantity']
-    *
-    (1 - gold_df['discount'])
+    * gold_df['quantity']
+    * (1 - gold_df['discount'])
 )
 
 gold_df['year'] = (
@@ -192,50 +210,38 @@ gold_df['month'] = (
     .dt.month_name()
 )
 
+gold_df['month_num'] = (
+    gold_df['transaction_date']
+    .dt.month
+)
+
 gold_df['quarter'] = (
     gold_df['transaction_date']
     .dt.quarter
 )
 
 print("\nTotal Revenue:")
-print(
-    round(
-        gold_df['revenue'].sum(),
-        2
-    )
-)
+print(round(gold_df['revenue'].sum(), 2))
 
 print("\nRevenue By Category:")
-
 print(
-    gold_df.groupby('category')
-    ['revenue']
+    gold_df.groupby('category')['revenue']
     .sum()
-    .sort_values(
-        ascending=False
-    )
+    .sort_values(ascending=False)
 )
 
 print("\nRevenue By City:")
-
 print(
-    gold_df.groupby('city')
-    ['revenue']
+    gold_df.groupby('city')['revenue']
     .sum()
-    .sort_values(
-        ascending=False
-    )
+    .sort_values(ascending=False)
 )
 
 print("\nTop Products:")
-
 print(
-    gold_df.groupby('product_name')
-    ['revenue']
+    gold_df.groupby('product_name')['revenue']
     .sum()
-    .sort_values(
-        ascending=False
-    )
+    .sort_values(ascending=False)
     .head(10)
 )
 
@@ -243,54 +249,67 @@ print("\nKPI Summary")
 
 print(
     "Total Orders:",
-    gold_df['transaction_id']
-    .nunique()
+    gold_df['transaction_id'].nunique()
 )
 
 print(
     "Total Customers:",
-    gold_df['customer_id']
-    .nunique()
+    gold_df['customer_id'].nunique()
 )
 
 print(
     "Total Revenue:",
-    round(
-        gold_df['revenue']
-        .sum(),
-        2
-    )
+    round(gold_df['revenue'].sum(), 2)
 )
+
+# DATA QUALITY CHECKS
+
+assert silver_df['price'].isnull().sum() == 0, \
+    "Price column still contains null values"
+
+assert gold_df['revenue'].isnull().sum() == 0, \
+    "Revenue column contains null values"
+
+assert gold_df['transaction_id'].nunique() > 0, \
+    "No transactions found"
+
+print("\nData Quality Checks Passed!")
 
 gold_df.to_csv(
     "Output/gold_data.csv",
     index=False
 )
 
-print(
-    "\nGold Layer Saved Successfully!"
+print("\nGold Layer Saved Successfully!")
+
+# SAVE TO SQLITE DATABASE
+
+conn = sqlite3.connect(
+    "Output/retailiq.db"
 )
 
-category_mapping = {
-    'Elec': 'Electronics',
-    'Furn': 'Furniture',
-    'Cloth': 'Clothing',
-    'Home': 'Home Appliances'
-}
-
-silver_df['category'] = silver_df['category'].replace(category_mapping)
-
-silver_df['category'] = (
-    silver_df['category']
-    .astype(str)
-    .str.strip()
-    .str.title()
+gold_df.to_sql(
+    "gold_sales",
+    conn,
+    if_exists="replace",
+    index=False
 )
+
+conn.close()
+
+print("\nSQLite Database Created Successfully!")
+
+assert len(gold_df) > 0, \
+    "Gold table is empty"
+
+print("Database Validation Passed!")
+
+# DATA QUALITY REPORT
 
 data_quality_report = {
     "Total Records": len(bronze_df),
     "Duplicates Removed": duplicates_removed,
-    "Missing Prices Fixed": 809,
+    "Missing Prices Fixed": missing_prices_before,
     "Emails Masked": len(silver_df),
     "Phones Masked": len(silver_df)
 }
@@ -299,3 +318,15 @@ print("\nData Quality Report")
 
 for k, v in data_quality_report.items():
     print(f"{k}: {v}")
+
+dq_df = pd.DataFrame(
+    list(data_quality_report.items()),
+    columns=["Metric", "Value"]
+)
+
+dq_df.to_csv(
+    "Output/data_quality_report.csv",
+    index=False
+)
+
+print("\nData Quality Report Saved Successfully!")
