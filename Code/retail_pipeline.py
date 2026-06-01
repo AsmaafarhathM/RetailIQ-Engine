@@ -1,5 +1,8 @@
 import pandas as pd
-import sqlite3
+from sqlalchemy import create_engine
+import os
+from dotenv import load_dotenv
+from sqlalchemy import create_engine
 
 file_path = "Data/USECASE - Data Engineering.xlsx"
 
@@ -284,20 +287,24 @@ print("\nGold Layer Saved Successfully!")
 
 # SAVE TO SQLITE DATABASE
 
-conn = sqlite3.connect(
-    "Output/retailiq.db"
+load_dotenv()
+
+engine = create_engine(
+    f"mysql+mysqlconnector://"
+    f"{os.getenv('MYSQL_USER')}:"
+    f"{os.getenv('MYSQL_PASSWORD')}@"
+    f"{os.getenv('MYSQL_HOST')}/"
+    f"{os.getenv('MYSQL_DATABASE')}"
 )
 
 gold_df.to_sql(
     "gold_sales",
-    conn,
+    con=engine,
     if_exists="replace",
     index=False
 )
 
-conn.close()
-
-print("\nSQLite Database Created Successfully!")
+print("\nMySQL Table Created Successfully!")
 
 assert len(gold_df) > 0, \
     "Gold table is empty"

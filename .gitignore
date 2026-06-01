@@ -15,6 +15,7 @@ env/
 .env
 .env.*
 !.env.example
+python-dotenv
 
 # Jupyter
 .ipynb_checkpoints/
