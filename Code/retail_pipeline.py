@@ -1,8 +1,10 @@
-import pandas as pd
-from sqlalchemy import create_engine
 import os
+
+import pandas as pd
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
+
+os.makedirs("Output", exist_ok=True)
 
 file_path = "Data/USECASE - Data Engineering.xlsx"
 
@@ -54,24 +56,23 @@ bronze_df = pd.concat(
 print("\nCombined Bronze Layer Shape:")
 print(bronze_df.shape)
 
-bronze_df.to_csv(
-    "Output/bronze_data.csv",
-    index=False
-)
-
-print("\nBronze Layer Saved Successfully!")
-
 print("\nMissing Values:")
 print(bronze_df.isnull().sum())
 
 print("\nDuplicate Records:")
 print(bronze_df.duplicated().sum())
 
-# Remove Unnamed Columns if any
 bronze_df = bronze_df.loc[
     :,
     ~bronze_df.columns.str.contains("^Unnamed")
 ]
+
+bronze_df.to_csv(
+    "Output/bronze_data.csv",
+    index=False
+)
+
+print("\nBronze Layer Saved Successfully!")
 
 # ----------------------------
 # SILVER LAYER
@@ -285,7 +286,7 @@ gold_df.to_csv(
 
 print("\nGold Layer Saved Successfully!")
 
-# SAVE TO SQLITE DATABASE
+# LOAD GOLD LAYER INTO MYSQL
 
 load_dotenv()
 

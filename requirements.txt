@@ -1,4 +1,6 @@
 pandas
 openpyxl
 numpy
+sqlalchemy
+python-dotenv
 mysql-connector-python
